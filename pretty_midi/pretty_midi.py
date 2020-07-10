@@ -48,7 +48,7 @@ class PrettyMIDI(object):
         List of :class:`pretty_midi.Lyric` objects.
     """
 
-    def __init__(self, midi_file=None, resolution=220, initial_tempo=120.):
+    def __init__(self, midi_file=None, resolution=220, initial_tempo=120.,overlap='close_all'):
         """Initialize either by populating it with MIDI data from a file or
         from scratch with no data.
 
@@ -101,7 +101,7 @@ class PrettyMIDI(object):
                     RuntimeWarning)
 
             # Populate the list of instruments
-            self._load_instruments(midi_data)
+            self._load_instruments(midi_data,overlap)
 
         else:
             self.resolution = resolution
@@ -223,7 +223,7 @@ class PrettyMIDI(object):
         self.__tick_to_time[start_tick:] = (last_end_time +
                                             tick_scale*ticks)
 
-    def _load_instruments(self, midi_data):
+    def _load_instruments(self, midi_data,overlap):
         """Populates ``self.instruments`` using ``midi_data``.
 
         Parameters
@@ -323,14 +323,30 @@ class PrettyMIDI(object):
                         end_tick = event.time
                         open_notes = last_note_on[key]
 
-                        notes_to_close = [
-                            (start_tick, velocity)
-                            for start_tick, velocity in open_notes
-                            if start_tick != end_tick]
-                        notes_to_keep = [
-                            (start_tick, velocity)
-                            for start_tick, velocity in open_notes
-                            if start_tick == end_tick]
+                        if overlap == "close_all":
+
+                            notes_to_close = [
+                                (start_tick, velocity)
+                                for start_tick, velocity in open_notes
+                                if start_tick != end_tick]
+                            notes_to_keep = [
+                                (start_tick, velocity)
+                                for start_tick, velocity in open_notes
+                                if start_tick == end_tick]
+
+
+
+                        elif overlap == "FIFO":
+
+                            notes_to_close = [open_notes[0]]
+                            notes_to_keep = open_notes[1:]
+
+                        elif overlap == "LIFO":
+                            notes_to_close = [open_notes[-1]]
+                            notes_to_keep = open_notes[:-1]
+                        else:
+                            raise ValueError("Argument overlap has to be in ['close_all', 'FIFO', 'LIFO']!")
+
 
                         for start_tick, velocity in notes_to_close:
                             start_time = self.__tick_to_time[start_tick]
@@ -356,6 +372,7 @@ class PrettyMIDI(object):
                         else:
                             # Remove the last note on for this instrument
                             del last_note_on[key]
+
                 # Store pitch bends
                 elif event.type == 'pitchwheel':
                     # Create pitch bend class instance
