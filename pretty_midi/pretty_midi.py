@@ -48,7 +48,7 @@ class PrettyMIDI(object):
         List of :class:`pretty_midi.Lyric` objects.
     """
 
-    def __init__(self, midi_file=None, resolution=220, initial_tempo=120.,overlap='close_all'):
+    def __init__(self, midi_file=None, resolution=220, initial_tempo=120.,overlap='close_all',lone_note_on='drop'):
         """Initialize either by populating it with MIDI data from a file or
         from scratch with no data.
 
@@ -101,7 +101,7 @@ class PrettyMIDI(object):
                     RuntimeWarning)
 
             # Populate the list of instruments
-            self._load_instruments(midi_data,overlap)
+            self._load_instruments(midi_data,overlap,lone_note_on)
 
         else:
             self.resolution = resolution
@@ -223,7 +223,7 @@ class PrettyMIDI(object):
         self.__tick_to_time[start_tick:] = (last_end_time +
                                             tick_scale*ticks)
 
-    def _load_instruments(self, midi_data,overlap):
+    def _load_instruments(self, midi_data,overlap,lone_note_on):
         """Populates ``self.instruments`` using ``midi_data``.
 
         Parameters
@@ -399,6 +399,29 @@ class PrettyMIDI(object):
                         program, event.channel, track_idx, 0)
                     # Add the control change event
                     instrument.control_changes.append(control_change)
+            if lone_note_on == "drop":
+                #Any note-on message that wasn't terminated by a note-off message is dropped
+                pass
+            elif lone_note_on == "keep":
+                #We keep any note-on message that wasn't terminated by a note-off message, and we attribute it a duration of 1s
+                for (event_channel,event_note), notes_to_close in last_note_on.items():
+                    for start_tick, velocity in notes_to_close:
+                        start_time = self.__tick_to_time[start_tick]
+                        end_time = start_time+1
+                        # Create the note event
+                        note = Note(velocity, event_note, start_time,
+                                    end_time)
+                        # Get the program and drum type for the current
+                        # instrument
+                        program = current_instrument[event_channel]
+                        # Retrieve the Instrument instance for the current
+                        # instrument
+                        # Create a new instrument if none exists
+                        instrument = __get_instrument(
+                            program, event_channel, track_idx, 1)
+                        # Add the note event
+                        instrument.notes.append(note)
+
         # Initialize list of instruments from instrument_map
         self.instruments = [i for i in instrument_map.values()]
 
